@@ -33,4 +33,4 @@ context) in the fairly near future.  Note that you can also use ctypes to get
 at anything not explicitly exposed to Pyton already.
 
 [1] http://www.gluster.org
-[2] http://hekafs.org/dist/xlator\_api\_2.html
+[2] http://hekafs.org/dist/xlator_api_2.html
