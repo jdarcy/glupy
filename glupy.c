@@ -39,29 +39,15 @@ glupy_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                   struct iatt *buf, dict_t *xdata, struct iatt *postparent)
 {
         glupy_private_t *priv = this->private;
-        PyObject        *args = NULL;
-        PyObject        *result = NULL;
 
         if (!priv->cbks[GLUPY_LOOKUP]) {
                 goto unwind;
         }
+
+        return ((fop_lookup_cbk_t)(priv->cbks[GLUPY_LOOKUP]))(
+                frame, cookie, this, op_ret, op_errno,
+                inode, buf, xdata, postparent);
         
-        args = Py_BuildValue("kkkiikkkk",frame,cookie,this,op_ret,op_errno,
-                             inode,buf,xdata,postparent);
-        if (!args) {
-                goto unwind;
-        }
-
-        result = PyObject_CallObject(priv->cbks[GLUPY_LOOKUP],args);
-        Py_DECREF(args);
-        if (!result) {
-                goto unwind;
-        }
-
-        /* TBD: propagate return value? */
-        Py_DECREF(result);
-        return 0;
-
 unwind:
         STACK_UNWIND_STRICT (lookup, frame, op_ret, op_errno, inode, buf,
                              xdata, postparent);
@@ -130,32 +116,21 @@ err:
         return Py_None;
 }
 
-PyObject *
-unwind_lookup (PyObject *self, PyObject *args)
+void
+unwind_lookup (call_frame_t *frame, int32_t op_ret, int32_t op_errno,
+               inode_t *inode, struct iatt *buf,
+               dict_t *xdata, struct iatt *postparent)
 {
-        long             py_frame;
-        int              py_op_ret;
-        int              py_op_errno;
-        long             py_inode;
-        long             py_buf;
-        long             py_xdata;
-        long             py_postparent;
-        xlator_t        *this = THIS;
+        STACK_UNWIND_STRICT(lookup,frame,op_ret,op_errno,
+                            inode,buf,xdata,postparent);
+}
 
-        if (!PyArg_ParseTuple(args,"kiikkkk",&py_frame,&py_op_ret,&py_op_errno,
-                              &py_inode,&py_buf,&py_xdata,&py_postparent)) {
-                gf_log (this->name, GF_LOG_ERROR, "bad %s call", __func__);
-                goto err;
-        }
+void
+set_lookup_cbk (long py_this, fop_lookup_cbk_t cbk)
+{
+        glupy_private_t *priv   = ((xlator_t *)py_this)->private;
 
-        STACK_UNWIND_STRICT (lookup, ((call_frame_t *)py_frame),
-                                      py_op_ret, py_op_errno,
-                                      ((inode_t *)py_inode),
-                                      ((struct iatt *)py_buf),
-                                      ((dict_t *)py_xdata),
-                                      ((struct iatt *)py_postparent));
-err:
-        return Py_None;
+        priv->cbks[GLUPY_LOOKUP] = (long)cbk;
 }
 
 #define GLUPY_API_FUNCTION(x)  { #x "_fop", #x "_cbk" }
@@ -186,27 +161,12 @@ fill_api_list (glupy_private_t *priv)
                 else {
                         PyErr_Clear();
                 }
-                py_func = PyObject_GetAttrString(priv->py_xlator,
-                                                 api_functions[i].cbk_name);
-                if (py_func) {
-                        if (PyCallable_Check(py_func)) {
-                                priv->cbks[i] = py_func;
-                        }
-                        else {
-                                Py_DECREF(py_func);
-                        }
-                }
-                else {
-                        PyErr_Clear();
-                }
         }
 }
 
 static PyMethodDef GlupyMethods[] = {
-    { "wind_lookup", wind_lookup, METH_VARARGS,
-      "STACK_WIND for a lookup call" },
-    { "unwind_lookup", unwind_lookup, METH_VARARGS,
-      "STACK_UNWIND for a lookup call" },
+        { "wind_lookup", wind_lookup, METH_VARARGS,
+          "STACK_WIND for a lookup call" },
     {NULL, NULL, 0, NULL}
 };
 
@@ -230,6 +190,7 @@ init (xlator_t *this)
         if (!priv) {
                 goto *err_cleanup;
         }
+        this->private = priv;
         err_cleanup = &&err_free_priv;
 
         if (!py_inited) {
@@ -259,11 +220,12 @@ init (xlator_t *this)
         }
         err_cleanup = &&err_deref_init;
 
-        py_args = PyTuple_New(0);
+        py_args = PyTuple_New(1);
         if (!py_args) {
                 gf_log (this->name, GF_LOG_ERROR, "could not create args");
                 goto *err_cleanup;
         }
+        PyTuple_SetItem(py_args,0,PyLong_FromLong((long)this));
 
         /* TBD: pass in list of children */
         priv->py_xlator = PyObject_CallObject(py_init_func, py_args);
@@ -275,7 +237,6 @@ init (xlator_t *this)
         gf_log (this->name, GF_LOG_INFO, "init returned %p", priv->py_xlator);
 
         fill_api_list(priv);
-        this->private = priv;
 	return 0;
 
 err_deref_init:

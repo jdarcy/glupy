@@ -35,7 +35,7 @@ typedef struct {
         PyObject        *py_module;
         PyObject        *py_xlator;
         PyObject        *fops[GLUPY_N_FUNCS];
-        PyObject        *cbks[GLUPY_N_FUNCS];
+        long             cbks[GLUPY_N_FUNCS];
 } glupy_private_t;
 
 enum gf_glupy_mem_types_ {
