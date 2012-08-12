@@ -84,67 +84,37 @@ glupy_lookup (call_frame_t *frame, xlator_t *this, loc_t *loc,
               dict_t *xdata)
 {
         glupy_private_t *priv = this->private;
-        PyObject        *args = NULL;
-        PyObject        *result = NULL;
         PyGILState_STATE gstate;
+        int32_t ret;
 
         if (!priv->fops[GLUPY_LOOKUP]) {
                 goto wind;
         }
 
         gstate = glupy_enter();
-
-        args = Py_BuildValue("kkkk",frame,this,loc,xdata);
-        if (!args) {
-                goto release_gil;
-        }
-
-        result = PyObject_CallObject(priv->fops[GLUPY_LOOKUP],args);
-        Py_DECREF(args);
+        ret = ((fop_lookup_t)(priv->fops[GLUPY_LOOKUP]))(
+                frame, this, loc, xdata);
         glupy_leave(gstate);
-        if (!result) {
-                goto wind;
-        }
 
-        /* TBD: propagate return value? */
-        Py_DECREF(result);
-        return 0;
+        return ret;
 
-release_gil:
-        glupy_leave(gstate);
 wind:
         STACK_WIND (frame, glupy_lookup_cbk, FIRST_CHILD(this),
                     FIRST_CHILD(this)->fops->lookup, loc, xdata);
         return 0;
 }
 
-PyObject *
-wind_lookup (PyObject *self, PyObject *args)
+void
+wind_lookup (call_frame_t *frame, xlator_t *xl, loc_t *loc, dict_t *xdata)
 {
-        long             py_frame;
-        long             py_xl;
-        long             py_loc;
-        long             py_xdata;
+        
         xlator_t        *this = THIS;
-        xlator_t        *xl = FIRST_CHILD(this);
 
-        if (!PyArg_ParseTuple(args,"kkkk",&py_frame,&py_xl,&py_loc,&py_xdata)) {
-                gf_log (this->name, GF_LOG_ERROR, "bad %s call", __func__);
-                xl = FIRST_CHILD(this);
-                goto err;
-        }
-
-        if (py_xl) {
-                xl = (xlator_t *)py_xl;
-        }
-        else {
+        if (!xl || (xl == this)) {
                 xl = FIRST_CHILD(this);
         }
 
-        STACK_WIND (((call_frame_t *)py_frame), glupy_lookup_cbk, xl,
-                    xl->fops->lookup, (loc_t *)py_loc, (dict_t *)py_xdata);
-err:
-        return Py_None;
+        STACK_WIND(frame,glupy_lookup_cbk,xl,xl->fops->lookup,loc,xdata);
 }
 
 void
@@ -154,6 +124,14 @@ unwind_lookup (call_frame_t *frame, int32_t op_ret, int32_t op_errno,
 {
         STACK_UNWIND_STRICT(lookup,frame,op_ret,op_errno,
                             inode,buf,xdata,postparent);
+}
+
+void
+set_lookup_fop (long py_this, fop_lookup_t fop)
+{
+        glupy_private_t *priv   = ((xlator_t *)py_this)->private;
+
+        priv->fops[GLUPY_LOOKUP] = (long)fop;
 }
 
 void
@@ -170,35 +148,6 @@ struct {
         char    *cbk_name;
 } api_functions[] = {
         GLUPY_API_FUNCTION(lookup),
-};
-
-void
-fill_api_list (glupy_private_t *priv)
-{
-        int              i = 0;
-        PyObject        *py_func = NULL;
-
-        for (i = 0; i < GLUPY_N_FUNCS; ++i) {
-                py_func = PyObject_GetAttrString(priv->py_xlator,
-                                                 api_functions[i].fop_name);
-                if (py_func) {
-                        if (PyCallable_Check(py_func)) {
-                                priv->fops[i] = py_func;
-                        }
-                        else {
-                                Py_DECREF(py_func);
-                        }
-                }
-                else {
-                        PyErr_Clear();
-                }
-        }
-}
-
-static PyMethodDef GlupyMethods[] = {
-        { "wind_lookup", wind_lookup, METH_VARARGS,
-          "STACK_WIND for a lookup call" },
-    {NULL, NULL, 0, NULL}
 };
 
 int32_t
@@ -229,7 +178,6 @@ init (xlator_t *this)
                 PyEval_InitThreads();
                 (void)pthread_key_create(&gil_init_key,NULL);
                 (void)pthread_setspecific(gil_init_key,(void *)1);
-                Py_InitModule("glupy", GlupyMethods);
                 py_inited = _gf_true;
         }
 
@@ -243,6 +191,9 @@ init (xlator_t *this)
         Py_DECREF(py_mod_name);
         if (!priv->py_module) {
                 gf_log (this->name, GF_LOG_ERROR, "Python import failed");
+                if (PyErr_Occurred()) {
+                        PyErr_Print();
+                }
                 goto *err_cleanup;
         }
         err_cleanup = &&err_deref_module;
@@ -270,7 +221,6 @@ init (xlator_t *this)
         }
         gf_log (this->name, GF_LOG_INFO, "init returned %p", priv->py_xlator);
 
-        fill_api_list(priv);
 	return 0;
 
 err_deref_init:

@@ -1,6 +1,5 @@
 import sys
 from ctypes import *
-from glupy import *
 
 dl = CDLL("",RTLD_GLOBAL)
 
@@ -29,17 +28,33 @@ class inode_t (Structure):
 class iatt_t (Structure):
 	pass
 
+lookup_fop_t = CFUNCTYPE(c_int,
+						 POINTER(call_frame_t), POINTER(xlator_t),
+						 POINTER(loc_t), POINTER(dict_t))
+
 lookup_cbk_t = CFUNCTYPE(c_int,
 						 POINTER(call_frame_t), c_void_p, POINTER(xlator_t),
 						 c_int, c_int, POINTER(inode_t),
 						 POINTER(iatt_t), POINTER(dict_t), POINTER(iatt_t))
 
+dl.set_lookup_fop.restype = None
+dl.set_lookup_fop.argtypes = [ c_long, lookup_fop_t ]
 dl.set_lookup_cbk.restype = None
 dl.set_lookup_cbk.argtypes = [ c_long, lookup_cbk_t ]
+dl.wind_lookup.restype = None
+dl.wind_lookup.argtypes = [ POINTER(call_frame_t), POINTER(xlator_t),
+						    POINTER(loc_t), POINTER(dict_t) ]
 dl.unwind_lookup.restype = None
 dl.unwind_lookup.argtypes = [ POINTER(call_frame_t), c_int, c_int,
 							  POINTER(inode_t), POINTER(iatt_t),
 							  POINTER(dict_t), POINTER(iatt_t) ]
+
+@lookup_fop_t
+def lookup_fop (frame, this, loc, xdata):
+	print "lookup FOP: %s" % loc.contents.path
+	# TBD: get real child xl from init, pass it here
+	dl.wind_lookup(frame,POINTER(xlator_t)(),loc,xdata)
+	return 0
 
 @lookup_cbk_t
 def lookup_cbk (frame, cookie, this, op_ret, op_errno,
@@ -50,12 +65,6 @@ def lookup_cbk (frame, cookie, this, op_ret, op_errno,
 
 class xlator ():
 	def __init__ (self, xl):
-		print '0x%x' % xl
+		dl.set_lookup_fop(xl,lookup_fop)
 		dl.set_lookup_cbk(xl,lookup_cbk)
-		print "Hi Jeff"
-	def lookup_fop (self, frame, this, loc, xdata):
-		py_loc = loc_t.from_address(int(loc))
-		print "lookup FOP: %s" % py_loc.path
-		# TBD: get real child xl from init, pass it here
-		wind_lookup(frame,0,loc,xdata)
 
