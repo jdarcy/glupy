@@ -33,20 +33,45 @@
 
 #include "glupy.h"
 
+pthread_key_t gil_init_key;
+
+PyGILState_STATE
+glupy_enter (void)
+{
+        if (!pthread_getspecific(gil_init_key)) {
+                PyEval_ReleaseLock();
+                (void)pthread_setspecific(gil_init_key,(void *)1);
+        }
+
+        return PyGILState_Ensure();
+}
+
+void
+glupy_leave (PyGILState_STATE gstate)
+{
+        PyGILState_Release(gstate);
+}
+
 int32_t
 glupy_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
                   int32_t op_ret, int32_t op_errno, inode_t *inode,
                   struct iatt *buf, dict_t *xdata, struct iatt *postparent)
 {
         glupy_private_t *priv = this->private;
+        PyGILState_STATE gstate;
+        int32_t ret;
 
         if (!priv->cbks[GLUPY_LOOKUP]) {
                 goto unwind;
         }
 
-        return ((fop_lookup_cbk_t)(priv->cbks[GLUPY_LOOKUP]))(
+        gstate = glupy_enter();
+        ret = ((fop_lookup_cbk_t)(priv->cbks[GLUPY_LOOKUP]))(
                 frame, cookie, this, op_ret, op_errno,
                 inode, buf, xdata, postparent);
+        glupy_leave(gstate);
+
+        return ret;
         
 unwind:
         STACK_UNWIND_STRICT (lookup, frame, op_ret, op_errno, inode, buf,
@@ -61,18 +86,22 @@ glupy_lookup (call_frame_t *frame, xlator_t *this, loc_t *loc,
         glupy_private_t *priv = this->private;
         PyObject        *args = NULL;
         PyObject        *result = NULL;
+        PyGILState_STATE gstate;
 
         if (!priv->fops[GLUPY_LOOKUP]) {
                 goto wind;
         }
 
+        gstate = glupy_enter();
+
         args = Py_BuildValue("kkkk",frame,this,loc,xdata);
         if (!args) {
-                goto wind;
+                goto release_gil;
         }
 
         result = PyObject_CallObject(priv->fops[GLUPY_LOOKUP],args);
         Py_DECREF(args);
+        glupy_leave(gstate);
         if (!result) {
                 goto wind;
         }
@@ -81,6 +110,8 @@ glupy_lookup (call_frame_t *frame, xlator_t *this, loc_t *loc,
         Py_DECREF(result);
         return 0;
 
+release_gil:
+        glupy_leave(gstate);
 wind:
         STACK_WIND (frame, glupy_lookup_cbk, FIRST_CHILD(this),
                     FIRST_CHILD(this)->fops->lookup, loc, xdata);
@@ -195,6 +226,9 @@ init (xlator_t *this)
 
         if (!py_inited) {
                 Py_Initialize();
+                PyEval_InitThreads();
+                (void)pthread_key_create(&gil_init_key,NULL);
+                (void)pthread_setspecific(gil_init_key,(void *)1);
                 Py_InitModule("glupy", GlupyMethods);
                 py_inited = _gf_true;
         }
