@@ -118,9 +118,9 @@ wind_lookup (call_frame_t *frame, xlator_t *xl, loc_t *loc, dict_t *xdata)
 }
 
 void
-unwind_lookup (call_frame_t *frame, int32_t op_ret, int32_t op_errno,
-               inode_t *inode, struct iatt *buf,
-               dict_t *xdata, struct iatt *postparent)
+unwind_lookup (call_frame_t *frame, long cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno, inode_t *inode,
+               struct iatt *buf, dict_t *xdata, struct iatt *postparent)
 {
         STACK_UNWIND_STRICT(lookup,frame,op_ret,op_errno,
                             inode,buf,xdata,postparent);

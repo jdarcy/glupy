@@ -28,26 +28,25 @@ class inode_t (Structure):
 class iatt_t (Structure):
 	pass
 
-lookup_fop_t = CFUNCTYPE(c_int,
-						 POINTER(call_frame_t), POINTER(xlator_t),
+lookup_fop_sig = (c_int, POINTER(call_frame_t), POINTER(xlator_t),
 						 POINTER(loc_t), POINTER(dict_t))
+lookup_fop_t = apply(CFUNCTYPE,lookup_fop_sig)
 
-lookup_cbk_t = CFUNCTYPE(c_int,
-						 POINTER(call_frame_t), c_void_p, POINTER(xlator_t),
+lookup_cbk_sig = (c_int, POINTER(call_frame_t), c_long, POINTER(xlator_t),
 						 c_int, c_int, POINTER(inode_t),
 						 POINTER(iatt_t), POINTER(dict_t), POINTER(iatt_t))
+lookup_cbk_t = apply(CFUNCTYPE,lookup_cbk_sig)
 
 dl.set_lookup_fop.restype = None
 dl.set_lookup_fop.argtypes = [ c_long, lookup_fop_t ]
 dl.set_lookup_cbk.restype = None
 dl.set_lookup_cbk.argtypes = [ c_long, lookup_cbk_t ]
 dl.wind_lookup.restype = None
-dl.wind_lookup.argtypes = [ POINTER(call_frame_t), POINTER(xlator_t),
-						    POINTER(loc_t), POINTER(dict_t) ]
+dl.wind_lookup.argtypes = list(lookup_fop_sig[1:])
 dl.unwind_lookup.restype = None
-dl.unwind_lookup.argtypes = [ POINTER(call_frame_t), c_int, c_int,
-							  POINTER(inode_t), POINTER(iatt_t),
-							  POINTER(dict_t), POINTER(iatt_t) ]
+dl.unwind_lookup.argtypes = list(lookup_cbk_sig[1:])
+
+# Translator-specific code starts here.
 
 @lookup_fop_t
 def lookup_fop (frame, this, loc, xdata):
@@ -60,7 +59,8 @@ def lookup_fop (frame, this, loc, xdata):
 def lookup_cbk (frame, cookie, this, op_ret, op_errno,
 				inode, buf, xdata, postparent):
 	print "lookup CBK: %d (%d)" % (op_ret, op_errno)
-	dl.unwind_lookup(frame,op_ret,op_errno,inode,buf,xdata,postparent)
+	dl.unwind_lookup(frame,cookie,this,op_ret,op_errno,
+					 inode,buf,xdata,postparent)
 	return 0
 
 class xlator ():
