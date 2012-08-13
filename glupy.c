@@ -74,6 +74,7 @@ glupy_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
         return ret;
         
 unwind:
+        frame->local = NULL;
         STACK_UNWIND_STRICT (lookup, frame, op_ret, op_errno, inode, buf,
                              xdata, postparent);
         return 0;
@@ -86,12 +87,14 @@ glupy_lookup (call_frame_t *frame, xlator_t *this, loc_t *loc,
         glupy_private_t *priv = this->private;
         PyGILState_STATE gstate;
         int32_t ret;
+        static long next_id = 0;
 
         if (!priv->fops[GLUPY_LOOKUP]) {
                 goto wind;
         }
 
         gstate = glupy_enter();
+        frame->local = (void *)++next_id;
         ret = ((fop_lookup_t)(priv->fops[GLUPY_LOOKUP]))(
                 frame, this, loc, xdata);
         glupy_leave(gstate);
@@ -122,8 +125,15 @@ unwind_lookup (call_frame_t *frame, long cookie, xlator_t *this,
                int32_t op_ret, int32_t op_errno, inode_t *inode,
                struct iatt *buf, dict_t *xdata, struct iatt *postparent)
 {
+        frame->local = NULL;
         STACK_UNWIND_STRICT(lookup,frame,op_ret,op_errno,
                             inode,buf,xdata,postparent);
+}
+
+long
+get_id (call_frame_t *frame)
+{
+        return (long)(frame->local);
 }
 
 void
@@ -142,18 +152,10 @@ set_lookup_cbk (long py_this, fop_lookup_cbk_t cbk)
         priv->cbks[GLUPY_LOOKUP] = (long)cbk;
 }
 
-#define GLUPY_API_FUNCTION(x)  { #x "_fop", #x "_cbk" }
-struct {
-        char    *fop_name;
-        char    *cbk_name;
-} api_functions[] = {
-        GLUPY_API_FUNCTION(lookup),
-};
-
 int32_t
 init (xlator_t *this)
 {
-	glupy_private_t         *priv           = NULL;
+        glupy_private_t         *priv           = NULL;
         char                    *module_name    = NULL;
         PyObject                *py_mod_name    = NULL;
         PyObject                *py_init_func   = NULL;
@@ -166,7 +168,7 @@ init (xlator_t *this)
                 return -1;
         }
 
-	priv = GF_CALLOC (1, sizeof (glupy_private_t), gf_glupy_mt_priv);
+        priv = GF_CALLOC (1, sizeof (glupy_private_t), gf_glupy_mt_priv);
         if (!priv) {
                 goto *err_cleanup;
         }
@@ -221,7 +223,7 @@ init (xlator_t *this)
         }
         gf_log (this->name, GF_LOG_INFO, "init returned %p", priv->py_xlator);
 
-	return 0;
+        return 0;
 
 err_deref_init:
         Py_DECREF(py_init_func);
@@ -237,7 +239,7 @@ void
 fini (xlator_t *this)
 {
         int              i = 0;
-	glupy_private_t *priv = this->private;
+        glupy_private_t *priv = this->private;
 
         if (!priv)
                 return;
@@ -252,9 +254,9 @@ fini (xlator_t *this)
         Py_DECREF(priv->py_xlator);
         Py_DECREF(priv->py_module);
         this->private = NULL;
-	GF_FREE (priv);
+        GF_FREE (priv);
 
-	return;
+        return;
 }
 
 struct xlator_fops fops = {
@@ -265,5 +267,5 @@ struct xlator_cbks cbks = {
 };
 
 struct volume_options options[] = {
-	{ .key  = {NULL} },
+        { .key  = {NULL} },
 };

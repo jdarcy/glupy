@@ -18,8 +18,9 @@ class loc_t (Structure):
 		( "name",	c_char_p ),
 		( "inode",	c_void_p ),
 		( "parent",	c_void_p ),
-		( "gfid", c_char * 16 ),
-		( "pargfid", c_char * 16 )
+		# Not quite correct, but easier to manipulate.
+		( "gfid", c_uint * 4 ),
+		( "pargfid", c_uint * 4 ),
 	]
 
 class inode_t (Structure):
