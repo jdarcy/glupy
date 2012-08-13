@@ -6,10 +6,16 @@ dl = CDLL("",RTLD_GLOBAL)
 class call_frame_t (Structure):
 	pass
 
-class xlator_t (Structure):
+class dict_t (Structure):
 	pass
 
-class dict_t (Structure):
+class fd_t (Structure):
+	pass
+
+class iatt_t (Structure):
+	pass
+
+class inode_t (Structure):
 	pass
 
 class loc_t (Structure):
@@ -23,10 +29,7 @@ class loc_t (Structure):
 		( "pargfid", c_uint * 4 ),
 	]
 
-class inode_t (Structure):
-	pass
-
-class iatt_t (Structure):
+class xlator_t (Structure):
 	pass
 
 lookup_fop_sig = (c_int, POINTER(call_frame_t), POINTER(xlator_t),
@@ -47,4 +50,23 @@ dl.wind_lookup.argtypes = list(lookup_fop_sig[1:])
 dl.unwind_lookup.restype = None
 dl.unwind_lookup.argtypes = list(lookup_cbk_sig[1:])
 
+create_fop_sig = (c_int, POINTER(call_frame_t), POINTER(xlator_t),
+						 POINTER(loc_t), c_int, c_uint, c_uint,
+						 POINTER(fd_t), POINTER(dict_t))
+create_fop_t = apply(CFUNCTYPE,create_fop_sig)
+
+create_cbk_sig = (c_int, POINTER(call_frame_t), c_long, POINTER(xlator_t),
+				  c_int, c_int, POINTER(fd_t), POINTER(inode_t),
+				  POINTER(iatt_t), POINTER(iatt_t), POINTER(iatt_t),
+				  POINTER(dict_t))
+create_cbk_t = apply(CFUNCTYPE,create_cbk_sig)
+
+dl.set_create_fop.restype = None
+dl.set_create_fop.argtypes = [ c_long, create_fop_t ]
+dl.set_create_cbk.restype = None
+dl.set_create_cbk.argtypes = [ c_long, create_cbk_t ]
+dl.wind_create.restype = None
+dl.wind_create.argtypes = list(create_fop_sig[1:])
+dl.unwind_create.restype = None
+dl.unwind_create.argtypes = list(create_cbk_sig[1:])
 

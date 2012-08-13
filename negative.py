@@ -60,8 +60,36 @@ def lookup_cbk (frame, cookie, this, op_ret, op_errno,
 					 inode,buf,xdata,postparent)
 	return 0
 
+@create_fop_t
+def create_fop (frame, this, loc, flags, mode, umask, fd, xdata):
+	pargfid = uuid2str(loc.contents.pargfid)
+	print "create FOP: %s:%s" % (pargfid, loc.contents.name)
+	key = dl.get_id(frame)
+	requests[key] = (pargfid, loc.contents.name[:])
+	# TBD: get real child xl from init, pass it here
+	dl.wind_create(frame,POINTER(xlator_t)(),loc,flags,mode,umask,fd,xdata)
+	return 0
+
+@create_cbk_t
+def create_cbk (frame, cookie, this, op_ret, op_errno,
+				fd, inode, buf, preparent, postparent, xdata):
+	print "create CBK: %d (%d)" % (op_ret, op_errno)
+	key = dl.get_id(frame)
+	pargfid, name = requests[key]
+	# Update the cache.
+	if op_ret == 0:
+		print "created %s, removing from cache" % name
+		if cache.has_key(pargfid):
+			cache[pargfid].discard(name)
+	del requests[key]
+	dl.unwind_create(frame,cookie,this,op_ret,op_errno,
+					 fd, inode, buf, preparent, postparent, xdata)
+	return 0
+
 class xlator ():
 	def __init__ (self, xl):
 		dl.set_lookup_fop(xl,lookup_fop)
 		dl.set_lookup_cbk(xl,lookup_cbk)
+		dl.set_create_fop(xl,create_fop)
+		dl.set_create_cbk(xl,create_cbk)
 

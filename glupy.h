@@ -28,6 +28,7 @@
 
 enum {
         GLUPY_LOOKUP = 0,
+        GLUPY_CREATE,
         GLUPY_N_FUNCS
 };
 

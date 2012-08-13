@@ -33,6 +33,8 @@
 
 #include "glupy.h"
 
+/* UTILITY FUNCTIONS FOR FOP-SPECIFIC CODE */
+
 pthread_key_t gil_init_key;
 
 PyGILState_STATE
@@ -51,6 +53,8 @@ glupy_leave (PyGILState_STATE gstate)
 {
         PyGILState_Release(gstate);
 }
+
+/* FOP: LOOKUP */
 
 int32_t
 glupy_lookup_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
@@ -130,12 +134,6 @@ unwind_lookup (call_frame_t *frame, long cookie, xlator_t *this,
                             inode,buf,xdata,postparent);
 }
 
-long
-get_id (call_frame_t *frame)
-{
-        return (long)(frame->local);
-}
-
 void
 set_lookup_fop (long py_this, fop_lookup_t fop)
 {
@@ -150,6 +148,115 @@ set_lookup_cbk (long py_this, fop_lookup_cbk_t cbk)
         glupy_private_t *priv   = ((xlator_t *)py_this)->private;
 
         priv->cbks[GLUPY_LOOKUP] = (long)cbk;
+}
+
+/* FOP: CREATE */
+
+int32_t
+glupy_create_cbk (call_frame_t *frame, void *cookie, xlator_t *this,
+                  int32_t op_ret, int32_t op_errno, fd_t *fd, inode_t *inode,
+                  struct iatt *buf, struct iatt *preparent,
+                  struct iatt *postparent, dict_t *xdata)
+{
+        glupy_private_t *priv = this->private;
+        PyGILState_STATE gstate;
+        int32_t ret;
+
+        if (!priv->cbks[GLUPY_CREATE]) {
+                goto unwind;
+        }
+
+        gstate = glupy_enter();
+        ret = ((fop_create_cbk_t)(priv->cbks[GLUPY_CREATE]))(
+                frame, cookie, this, op_ret, op_errno,
+                fd, inode, buf, preparent, postparent, xdata);
+        glupy_leave(gstate);
+
+        return ret;
+        
+unwind:
+        frame->local = NULL;
+        STACK_UNWIND_STRICT (create, frame, op_ret, op_errno, fd, inode, buf,
+                             preparent, postparent, xdata);
+        return 0;
+}
+
+int32_t
+glupy_create (call_frame_t *frame, xlator_t *this, loc_t *loc, int32_t flags,
+              mode_t mode, mode_t umask, fd_t *fd, dict_t *xdata)
+{
+        glupy_private_t *priv = this->private;
+        PyGILState_STATE gstate;
+        int32_t ret;
+        static long next_id = 0;
+
+        if (!priv->fops[GLUPY_CREATE]) {
+                goto wind;
+        }
+
+        gstate = glupy_enter();
+        frame->local = (void *)++next_id;
+        ret = ((fop_create_t)(priv->fops[GLUPY_CREATE]))(
+                frame, this, loc, flags, mode, umask, fd, xdata);
+        glupy_leave(gstate);
+
+        return ret;
+
+wind:
+        STACK_WIND (frame, glupy_create_cbk, FIRST_CHILD(this),
+                    FIRST_CHILD(this)->fops->create, loc, flags, mode, umask,
+                    fd, xdata);
+        return 0;
+}
+
+void
+wind_create (call_frame_t *frame, xlator_t *xl, loc_t *loc, int32_t flags,
+             mode_t mode, mode_t umask, fd_t *fd, dict_t *xdata)
+{
+        
+        xlator_t        *this = THIS;
+
+        if (!xl || (xl == this)) {
+                xl = FIRST_CHILD(this);
+        }
+
+        STACK_WIND (frame, glupy_create_cbk,xl, xl->fops->create,
+                    loc, flags, mode, umask, fd, xdata);
+}
+
+void
+unwind_create (call_frame_t *frame, long cookie, xlator_t *this,
+               int32_t op_ret, int32_t op_errno, fd_t *fd, inode_t *inode,
+               struct iatt *buf, struct iatt *preparent,
+               struct iatt *postparent, dict_t *xdata)
+{
+        frame->local = NULL;
+        STACK_UNWIND_STRICT (create, frame, op_ret, op_errno, fd, inode, buf,
+                             preparent, postparent, xdata);
+}
+
+void
+set_create_fop (long py_this, fop_create_t fop)
+{
+        glupy_private_t *priv   = ((xlator_t *)py_this)->private;
+
+        priv->fops[GLUPY_CREATE] = (long)fop;
+}
+
+void
+set_create_cbk (long py_this, fop_create_cbk_t cbk)
+{
+        glupy_private_t *priv   = ((xlator_t *)py_this)->private;
+
+        priv->cbks[GLUPY_CREATE] = (long)cbk;
+}
+
+/* NON-FOP-SPECIFIC CODE */
+
+long
+get_id (call_frame_t *frame)
+{
+        return (long)(frame->local);
 }
 
 int32_t
@@ -261,6 +368,7 @@ fini (xlator_t *this)
 
 struct xlator_fops fops = {
         .lookup = glupy_lookup,
+        .create = glupy_create,
 };
 
 struct xlator_cbks cbks = {
