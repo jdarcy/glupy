@@ -32,10 +32,13 @@ class xlator (Translator):
 		pargfid = uuid2str(loc.contents.pargfid)
 		print "lookup FOP: %s:%s" % (pargfid, loc.contents.name)
 		# Check the cache.
-		if cache.has_key(pargfid) and (loc.contents.name in cache[pargfid]):
-			print "short-circuiting for %s:%s" % (pargfid, loc.contents.name)
-			dl.unwind_lookup(frame,0,this,-1,2,None,None,None,None)
-			return 0
+		if cache.has_key(pargfid):
+			if loc.contents.name in cache[pargfid]:
+				print "short-circuiting for %s:%s" % (
+					pargfid, loc.contents.name)
+				dl.unwind_lookup(frame,0,this,-1,2,None,None,
+						 None,None)
+				return 0
 		key = dl.get_id(frame)
 		self.requests[key] = (pargfid, loc.contents.name[:])
 		# TBD: get real child xl from init, pass it here
@@ -43,7 +46,7 @@ class xlator (Translator):
 		return 0
 
 	def lookup_cbk (self, frame, cookie, this, op_ret, op_errno, inode, buf,
-					xdata, postparent):
+			xdata, postparent):
 		print "lookup CBK: %d (%d)" % (op_ret, op_errno)
 		key = dl.get_id(frame)
 		pargfid, name = self.requests[key]
@@ -69,11 +72,12 @@ class xlator (Translator):
 		key = dl.get_id(frame)
 		self.requests[key] = (pargfid, loc.contents.name[:])
 		# TBD: get real child xl from init, pass it here
-		dl.wind_create(frame,POINTER(xlator_t)(),loc,flags,mode,umask,fd,xdata)
+		dl.wind_create(frame,POINTER(xlator_t)(),loc,flags,mode,umask,
+			       fd,xdata)
 		return 0
 
-	def create_cbk (self, frame, cookie, this, op_ret, op_errno, fd, inode, buf,
-				    preparent, postparent, xdata):
+	def create_cbk (self, frame, cookie, this, op_ret, op_errno, fd, inode,
+			buf, preparent, postparent, xdata):
 		print "create CBK: %d (%d)" % (op_ret, op_errno)
 		key = dl.get_id(frame)
 		pargfid, name = self.requests[key]
@@ -83,7 +87,7 @@ class xlator (Translator):
 			if cache.has_key(pargfid):
 				cache[pargfid].discard(name)
 		del self.requests[key]
-		dl.unwind_create(frame,cookie,this,op_ret,op_errno,
-						 fd, inode, buf, preparent, postparent, xdata)
+		dl.unwind_create(frame,cookie,this,op_ret,op_errno,fd,inode,buf,
+				 preparent,postparent,xdata)
 		return 0
 
