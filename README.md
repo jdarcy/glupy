@@ -4,6 +4,10 @@ Python embedding (not extending) techniques, plus a dash of the ctypes module.
 The interface is a pretty minimal adaptation of the dispatches and callbacks
 from the C API[2] to Python, as follows:
 
+* Dispatch functions and callbacks must be defined on an "xlator" class
+  derived from gluster.Translator so that they'll be auto-registered with
+  the C translator during initialization.
+
 * For each dispatch or callback function you want to intercept, you define a
   Python function using the xxx\_fop\_t or xxx\_cbk\_t decorator.
 
@@ -21,17 +25,20 @@ from the C API[2] to Python, as follows:
   xxx\_unwind (like STACK\_UNWIND\_STRICT in the C API) to pass the request back
   to the caller.
 
-* To tie everything together, your module must include an "xlator" class with
-  an \_\_init\_\_ that calls set\_xxx\_fop and/or set\_xxx\_cbk to plug in your
-  Python functions.
+So far only the lookup and create operations are handled this way, to support
+the "negative lookup" example.  Now that the basic infrastructure is in place,
+adding more functions should be very quick, though with that much boilerplate I
+might pause to write a code generator.  I also plan to add structure
+definitions and interfaces for some of the utility functions in libglusterfs
+(especially those having to do with inode and fd context) in the fairly near
+future.  Note that you can also use ctypes to get at anything not explicitly
+exposed to Python already.
 
-So far only the lookup operation is handled this way.  Now that the basic
-infrastructure is in place, adding more functions should be very quick, though
-with that much boilerplate I might pause to write a code generator.  I also
-plan to add structure definitions and interfaces for some of the utility
-functions in libglusterfs (especially those having to do with inode and fd
-context) in the fairly near future.  Note that you can also use ctypes to get
-at anything not explicitly exposed to Python already.
+_If you're coming here because of the Linux Journal article, please note that
+the code has evolved since that was written. The version that matches the
+article is here:_
+
+https://github.com/jdarcy/glupy/tree/4bbae91ba459ea46ef32f2966562492e4ca9187a
 
 [1] http://www.gluster.org
 [2] http://hekafs.org/dist/xlator_api_2.html
