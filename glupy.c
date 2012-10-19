@@ -299,6 +299,9 @@ init (xlator_t *this)
         py_mod_name = PyString_FromString(module_name);
         if (!py_mod_name) {
                 gf_log (this->name, GF_LOG_ERROR, "could not create name");
+                if (PyErr_Occurred()) {
+                        PyErr_Print();
+                }
                 goto *err_cleanup;
         }
 
@@ -316,6 +319,9 @@ init (xlator_t *this)
         py_init_func = PyObject_GetAttrString(priv->py_module, "xlator");
         if (!py_init_func || !PyCallable_Check(py_init_func)) {
                 gf_log (this->name, GF_LOG_ERROR, "missing init func");
+                if (PyErr_Occurred()) {
+                        PyErr_Print();
+                }
                 goto *err_cleanup;
         }
         err_cleanup = &&err_deref_init;
@@ -323,6 +329,9 @@ init (xlator_t *this)
         py_args = PyTuple_New(1);
         if (!py_args) {
                 gf_log (this->name, GF_LOG_ERROR, "could not create args");
+                if (PyErr_Occurred()) {
+                        PyErr_Print();
+                }
                 goto *err_cleanup;
         }
         PyTuple_SetItem(py_args,0,PyLong_FromLong((long)this));
@@ -332,6 +341,9 @@ init (xlator_t *this)
         Py_DECREF(py_args);
         if (!priv->py_xlator) {
                 gf_log (this->name, GF_LOG_ERROR, "Python init failed");
+                if (PyErr_Occurred()) {
+                        PyErr_Print();
+                }
                 goto *err_cleanup;
         }
         gf_log (this->name, GF_LOG_INFO, "init returned %p", priv->py_xlator);
