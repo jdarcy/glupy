@@ -23,7 +23,7 @@ dl.get_id.argtypes = [ POINTER(call_frame_t) ]
 def uuid2str (orig):
 	return "%08x%08x%08x%08x" % (orig[0], orig[1], orig[2], orig[3])
 
-@lookup_fop_t
+@OpLookup.fop_type
 def lookup_fop (frame, this, loc, xdata):
 	pargfid = uuid2str(loc.contents.pargfid)
 	print "lookup FOP: %s:%s" % (pargfid, loc.contents.name)
@@ -38,7 +38,7 @@ def lookup_fop (frame, this, loc, xdata):
 	dl.wind_lookup(frame,POINTER(xlator_t)(),loc,xdata)
 	return 0
 
-@lookup_cbk_t
+@OpLookup.cbk_type
 def lookup_cbk (frame, cookie, this, op_ret, op_errno,
 				inode, buf, xdata, postparent):
 	print "lookup CBK: %d (%d)" % (op_ret, op_errno)
@@ -60,7 +60,7 @@ def lookup_cbk (frame, cookie, this, op_ret, op_errno,
 					 inode,buf,xdata,postparent)
 	return 0
 
-@create_fop_t
+@OpCreate.fop_type
 def create_fop (frame, this, loc, flags, mode, umask, fd, xdata):
 	pargfid = uuid2str(loc.contents.pargfid)
 	print "create FOP: %s:%s" % (pargfid, loc.contents.name)
@@ -70,7 +70,7 @@ def create_fop (frame, this, loc, flags, mode, umask, fd, xdata):
 	dl.wind_create(frame,POINTER(xlator_t)(),loc,flags,mode,umask,fd,xdata)
 	return 0
 
-@create_cbk_t
+@OpCreate.cbk_type
 def create_cbk (frame, cookie, this, op_ret, op_errno,
 				fd, inode, buf, preparent, postparent, xdata):
 	print "create CBK: %d (%d)" % (op_ret, op_errno)

@@ -40,10 +40,12 @@ pthread_key_t gil_init_key;
 PyGILState_STATE
 glupy_enter (void)
 {
+#if 0
         if (!pthread_getspecific(gil_init_key)) {
                 PyEval_ReleaseLock();
                 (void)pthread_setspecific(gil_init_key,(void *)1);
         }
+#endif
 
         return PyGILState_Ensure();
 }
@@ -285,8 +287,12 @@ init (xlator_t *this)
         if (!py_inited) {
                 Py_Initialize();
                 PyEval_InitThreads();
+#if 0
                 (void)pthread_key_create(&gil_init_key,NULL);
                 (void)pthread_setspecific(gil_init_key,(void *)1);
+#endif
+                /* PyEval_InitThreads takes this "for" us.  No thanks. */
+                PyEval_ReleaseLock();
                 py_inited = _gf_true;
         }
 
