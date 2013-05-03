@@ -1,4 +1,5 @@
 import sys
+from uuid import UUID
 from gluster import *
 
 # Negative-lookup-caching example.  If a file wasn't there the last time we
@@ -19,8 +20,8 @@ cache = {}
 dl.get_id.restype = c_long
 dl.get_id.argtypes = [ POINTER(call_frame_t) ]
 
-def uuid2str (orig):
-	return "%08x%08x%08x%08x" % (orig[0], orig[1], orig[2], orig[3])
+def uuid2str (gfid):
+        return str(UUID(''.join(map("{:02x}".format, gfid))))
 
 class xlator (Translator):
 
