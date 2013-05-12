@@ -2321,6 +2321,8 @@ init (xlator_t *this)
         PyObject                *py_mod_name    = NULL;
         PyObject                *py_init_func   = NULL;
         PyObject                *py_args        = NULL;
+        PyObject                *syspath        = NULL;
+        PyObject                *path           = NULL;
         static gf_boolean_t      py_inited      = _gf_false;
         void *                   err_cleanup    = &&err_return;
 
@@ -2347,6 +2349,12 @@ init (xlator_t *this)
                 PyEval_ReleaseLock();
                 py_inited = _gf_true;
         }
+
+        /* Adjust python's path */
+        syspath = PySys_GetObject("path");
+        path = PyString_FromString(GLUSTER_PYTHON_PATH);
+        PyList_Append(syspath, path);
+        Py_DECREF(path);
 
         py_mod_name = PyString_FromString(module_name);
         if (!py_mod_name) {
