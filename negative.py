@@ -21,7 +21,7 @@ dl.get_id.restype = c_long
 dl.get_id.argtypes = [ POINTER(call_frame_t) ]
 
 def uuid2str (gfid):
-        return str(UUID(''.join(map("{:02x}".format, gfid))))
+        return str(UUID(''.join(map("{0:02x}".format, gfid))))
 
 class xlator (Translator):
 
